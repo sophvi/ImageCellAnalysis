@@ -284,6 +284,7 @@ def post_analysis(folderName: str, threshold: float, square_mask):
     plt.close()
 
 def main(argv):
+    print("Currently Running: RGC Ablation", flush=True)
     folderName = FLAGS.folder
     diameter = FLAGS.diameter
     mode = FLAGS.mode

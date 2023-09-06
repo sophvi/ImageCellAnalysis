@@ -10,19 +10,22 @@ from absl import logging
 from cellpose import models, plot
 import tools
 import re
+import json
 from datetime import datetime, timedelta
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("folder",
-                    r"C:\Users\sophi\OPALS\AIImageAnalysis\data\RGC\RGCWTfov_15_noshock\Default",
-                    "Folder name")
+# flags.DEFINE_string("folder",
+#                     r"C:\Users\sophi\OPALS\AIImageAnalysis\data\RGC\RGCWTfov_15_noshock\Default",
+                    # "Folder name")
 flags.DEFINE_integer("diameter", 120, "Custom diameter value (in pixels) used for the cellpose model")
 
 flags.DEFINE_integer("mode", 0, "0-Cell_Search, 1-MaxCells, 2-Data_Analysis, 3-Post_Analysis")
 
-def cell_search(folderName: str, diameter: int):
+def cell_search(folderName: str, diameter: int, experimentName: str):
     # global rois
-    destFolder = os.path.join(folderName, "output")
+    destFolder = os.path.join(os.getcwd(), experimentName)
+    tools.makeFolder(destFolder)
+    destFolder = os.path.join(destFolder, "output")
     tools.makeFolder(destFolder)
     destFolder = os.path.join(destFolder, "cell_search")
     tools.makeFolder(destFolder)
@@ -45,15 +48,15 @@ def cell_search(folderName: str, diameter: int):
                     header="index,x,y,signal,background,xmin,ymin,xmax,ymax", comments="")
     logging.info("{} Finish image analysis {}".format(49 * "=", 49 * "="))
 
-def maximum_cells(folderName: str):
-    folderName = os.path.join(folderName, "output")
-    folderName = os.path.join(folderName, "cell_search")
-    fileNames = tools.fileLists(folderName, delimiter="csv")
+def maximum_cells(folderName: str, experimentName: str):
+    destFolder = os.path.join(os.path.join(os.path.join(folderName, experimentName), "output"), "cell_search")
+    print("destination here " + destFolder)
+    fileNames = tools.fileLists(destFolder, delimiter="csv")
     df = pd.DataFrame()
     for idx, fileName in enumerate(fileNames[:]):
         if idx % 50 == 0:
             logging.info("filename is {}".format(fileName[:-4]))
-        temp = pd.read_csv(os.path.join(folderName, fileName))
+        temp = pd.read_csv(os.path.join(destFolder, fileName))
         temp["file"] = fileName[:-4]
         df = pd.concat([df, temp])
 
@@ -63,7 +66,7 @@ def maximum_cells(folderName: str):
     for idx, fileSn in enumerate(fileSns):
         cellCounts[idx] = len(df[df["file"] == fileSn])
     maxIdx = np.argmax(cellCounts)
-    with open(os.path.join(folderName[:-12], "max_cell_frame.csv"), "w") as fp:
+    with open(os.path.join(destFolder[:-12], "max_cell_frame.csv"), "w") as fp:
         fp.write("max_cell_frame\n")
         fp.write(str(maxIdx)+"\n")
     logging.info("the maximum cell happened at frame {}".format(maxIdx))
@@ -79,13 +82,15 @@ def maximum_cells(folderName: str):
     ax.text(maxIdx + 5, cellCounts[maxIdx], str(maxIdx), color="r")
     ax.set_xlabel("Frame")
     ax.set_ylabel("Cell Count")
-    plt.savefig(os.path.join(folderName, "cell_count.png"), dpi=150)
+    plt.savefig(os.path.join(destFolder, "cell_count.png"), dpi=150)
+    print(destFolder)
     plt.close()
 
-def data_analysis(folderName: str):
+def data_analysis(folderName: str, experimentFolder: str, experimentName: str):
     logging.debug(folderName)
 
     destFolder = os.path.join(folderName, "output")
+    pictureFolder = os.path.join(experimentFolder, experimentName)
     tools.makeFolder(destFolder)
 
     maxFrameFileName = os.path.join(destFolder, "max_cell_frame.csv")
@@ -137,7 +142,7 @@ def data_analysis(folderName: str):
         plt.text(cell[1], cell[2], "roi_{}".format(idx),  fontdict=font)
     plt.title(fileName)
     plt.tight_layout()
-    plt.savefig(os.path.join(destFolder, "mask.png"), dpi=150)
+    plt.savefig(os.path.join(pictureFolder, "mask.png"), dpi=150)
     plt.close()
     num_cells = masks.max()
     result = pd.DataFrame()
@@ -166,9 +171,10 @@ def data_analysis(folderName: str):
     logging.debug("\n{}".format(result))
     logging.info("{} Finish image analysis {}".format(49 * "=", 49 * "="))
 
-def post_analysis(folderName: str, threshold: float):
-    destFolder = os.path.join(folderName, "roi_stats")
-    tools.makeFolder(destFolder)
+def post_analysis(folderName: str, threshold: float, experimentFolder: str, experimentName: str):
+    # destFolder = os.path.join(folderName, "roi_stats")
+    pictureFolder = os.path.join(experimentFolder, experimentName)
+    # tools.makeFolder(destFolder)
     plt.rcParams['font.size'] = '14'
     style = 'seaborn-v0_8-darkgrid'
     plt.style.use(style)
@@ -229,24 +235,28 @@ def post_analysis(folderName: str, threshold: float):
         plt.xlabel("Frame #")
         plt.ylabel("Signal [DN]")
         plt.tight_layout()
-        plt.savefig(os.path.join(destFolder, "statistics_{}.png".format(column)), dpi=150)
+        plt.savefig(os.path.join(pictureFolder, "statistics_{}.png".format(column)), dpi=150)
         plt.close()
-    resultDf.to_csv(os.path.join(destFolder, "statistics.csv"), index=False)
+    resultDf.to_csv(os.path.join(pictureFolder, "statistics.csv"), index=False)
     logging.info("{} Finish image analysis {}".format(49 * "=", 49 * "="))
     plt.show()
 
 def main(argv):
-    folderName = FLAGS.folder
+    config_file = open('config.json', 'r')
+    config = json.load(config_file)
+    config_file.close()
+    folderName = config['folder_location']
     diameter = FLAGS.diameter
     mode = FLAGS.mode
+    os.makedirs(os.path.join(os.getcwd(), config['experiment_name']), exist_ok=True)
     if mode == 0:
-        cell_search(folderName, diameter)
+        cell_search(folderName, diameter, config['experiment_name'])
     if mode <= 1:
-        maximum_cells(folderName)
+        maximum_cells(os.getcwd(), config['experiment_name'])
     if mode <= 2:
-        data_analysis(folderName)
+        data_analysis(folderName, os.getcwd(), config['experiment_name'])
     if mode <= 3:
-        post_analysis(folderName, 1.1)
+        post_analysis(folderName, 1.1, os.getcwd(), config['experiment_name'])
     # try:
     #     cell_search(folderName, diameter)
     # except:
