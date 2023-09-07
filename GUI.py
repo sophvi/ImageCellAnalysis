@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         self.start_button = QPushButton('Start', self)
         self.stop_button = QPushButton('Stop', self)
         self.shockwave_button = QPushButton('Shockwave', self)
-        self.rgc_button = QPushButton('RGC', self)
+        self.rgc_button = QPushButton('Ablation', self)
         self.next_button = QPushButton('Next', self)
         self.prev_button = QPushButton('Prev', self)
 
